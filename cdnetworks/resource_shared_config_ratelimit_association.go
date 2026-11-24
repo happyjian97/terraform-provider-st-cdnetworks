@@ -102,7 +102,7 @@ func (r *sharedConfigRatelimitAssociationResource) Create(ctx context.Context, r
 		resp.Diagnostics.AddError("[API ERROR] Fail to Create SharedConfigRateLimitAssociation", err.Error())
 		return
 	}
-	if associateResponse.Code != "200" {
+	if associateResponse.Code != 200 {
 		resp.Diagnostics.AddError("[API ERROR] Fail to Create SharedConfigRateLimitAssociation", fmt.Sprintf("code: %s, msg: %s", associateResponse.Code, associateResponse.Msg))
 		return
 	}
@@ -180,7 +180,7 @@ func (r *sharedConfigRatelimitAssociationResource) Delete(ctx context.Context, r
 				resp.Diagnostics.AddError("[API ERROR] Fail to Delete SharedConfigRateLimitAssociation", err.Error())
 				return
 			}
-			if disassociateResponse.Code != "200" {
+			if disassociateResponse.Code != 200 {
 				resp.Diagnostics.AddError("[API ERROR] Fail to Delete SharedConfigRateLimitAssociation", fmt.Sprintf("code: %s, msg: %s", disassociateResponse.Code, disassociateResponse.Msg))
 				return
 			}

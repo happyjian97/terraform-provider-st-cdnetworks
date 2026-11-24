@@ -1,6 +1,8 @@
 package cdnetworksapi
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // AssociateSharedRateLimitRule
 type AssociateSharedRateLimitRuleRequest struct {
@@ -9,7 +11,7 @@ type AssociateSharedRateLimitRuleRequest struct {
 }
 
 type AssociateSharedRateLimitRuleResponse struct {
-	Code string `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 
@@ -36,7 +38,7 @@ type DisassociateSharedRateLimitRuleRequest struct {
 }
 
 type DisassociateSharedRateLimitRuleResponse struct {
-	Code string `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 

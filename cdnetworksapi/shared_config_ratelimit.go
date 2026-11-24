@@ -1,6 +1,8 @@
 package cdnetworksapi
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // Overall RateLimitRule response
 type RateLimitRule struct {
@@ -133,7 +135,7 @@ type JA4Condition struct {
 // Autonomous System Number matching.
 type ASNCondition struct {
 	MatchType string   `json:"matchType"`
-	ASNList   []uint32 `json:"asnList"`
+	ASNList   []string `json:"asnList"`
 }
 
 // AddSharedRateLimitRule
@@ -152,7 +154,7 @@ type AddSharedRateLimitRuleRequest struct {
 }
 
 type AddSharedRateLimitRuleResponse struct {
-	Code string `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 	Data string `json:"data"`
 }
@@ -179,7 +181,7 @@ type GetSharedRateLimitRulesRequest struct {
 }
 
 type GetSharedRateLimitRulesResponse struct {
-	Code string          `json:"code"`
+	Code int             `json:"code"`
 	Msg  string          `json:"msg"`
 	Data []RateLimitRule `json:"data"`
 }
@@ -211,7 +213,7 @@ type UpdateSharedRateLimitRuleRequest struct {
 }
 
 type UpdateSharedRateLimitRuleResponse struct {
-	Code string `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 
@@ -237,7 +239,7 @@ type DeleteSharedRateLimitRulesRequest struct {
 }
 
 type DeleteSharedRateLimitRulesResponse struct {
-	Code string `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 

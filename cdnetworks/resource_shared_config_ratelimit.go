@@ -3,6 +3,7 @@ package cdnetworks
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -128,7 +129,7 @@ type ja4ConditionModel struct {
 
 type asnConditionModel struct {
 	MatchType types.String `tfsdk:"match_type"`
-	ASNList   []int64      `tfsdk:"asn_list"`
+	ASNList   []string     `tfsdk:"asn_list"`
 }
 
 type sharedConfigRatelimitResource struct {
@@ -193,26 +194,6 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 					stringvalidator.LengthAtMost(1000),
 				},
 			},
-			"statistical_items": schema.ListNestedAttribute{
-				Description: "Statistical granularity list.",
-				Required:    true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"statistical_item": schema.StringAttribute{
-							Description: "Statistical granularity. Valid values: `IP`, `UA`, `COOKIE`, `URL`, `HEADER`. `HEADER` is not supported when the match conditions contain status code.",
-							Required:    true,
-							Validators: []validator.String{
-								stringvalidator.OneOf("IP", "UA", "COOKIE", "URL", "HEADER"),
-							},
-						},
-						"statistics_keys": schema.ListAttribute{
-							Description: "Key list when the statistical granularity is `COOKIE` or `HEADER`.",
-							ElementType: types.StringType,
-							Optional:    true,
-						},
-					},
-				},
-			},
 			"statistical_period": schema.Int64Attribute{
 				Description: "Statistical period in seconds, range: 1 - 3600.",
 				Required:    true,
@@ -241,32 +222,6 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 					stringvalidator.OneOf("PERMANENT", "WITHOUT", "WITHIN"),
 				},
 			},
-			"rate_limit_effective": schema.SingleNestedAttribute{
-				Description: "Rule effective cycle. Required when `effective_status` is `WITHIN` or `WITHOUT`.",
-				Optional:    true,
-				Attributes: map[string]schema.Attribute{
-					"effective": schema.ListAttribute{
-						Description: "Days of week when the rule takes effect. Valid values: `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`.",
-						ElementType: types.StringType,
-						Required:    true,
-						Validators: []validator.List{
-							listvalidator.ValueStringsAre(stringvalidator.OneOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")),
-						},
-					},
-					"start": schema.StringAttribute{
-						Description: "Start time, format: `HH:mm`.",
-						Required:    true,
-					},
-					"end": schema.StringAttribute{
-						Description: "End time, format: `HH:mm`.",
-						Required:    true,
-					},
-					"timezone": schema.StringAttribute{
-						Description: "Timezone, default: `GMT+8`. Refer to vendor documentation for valid values.",
-						Optional:    true,
-					},
-				},
-			},
 			"action": schema.StringAttribute{
 				Description: "Handling action. Valid values: `NO_USE`, `LOG`, `COOKIE`, `JS_CHECK`, `JS_CHALLENGE`, `DELAY`, `BLOCK`, `RESET`, `IP_BLOCK`, `CUSTOM_ACTION_ID`, `FRIENDLY_PAGE`. When the match conditions contain status code, only `NO_USE`, `LOG`, `BLOCK`, `RESET`, `IP_BLOCK` and `CUSTOM_ACTION_ID` are supported.",
 				Required:    true,
@@ -278,14 +233,58 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 				Description: "Friendly page url to redirect to, required when `action` is `FRIENDLY_PAGE`.",
 				Optional:    true,
 			},
-			"rate_limit_rule_condition": schema.SingleNestedAttribute{
-				Description: "Match conditions of the rate limit rule.",
-				Optional:    true,
+		},
+		Blocks: map[string]schema.Block{
+			"statistical_items": schema.ListNestedBlock{
+				Description: "Statistical granularity list.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"statistical_item": schema.StringAttribute{
+							Description: "Statistical granularity. Valid values: `IP`, `UA`, `COOKIE`, `URL`, `HEADER`. `HEADER` is not supported when the match conditions contain status code.",
+							Required:    true,
+							Validators: []validator.String{
+								stringvalidator.OneOf("IP", "UA", "COOKIE", "URL", "HEADER"),
+							},
+						},
+						"statistics_keys": schema.ListAttribute{
+							Description: "Key list when the statistical granularity is `COOKIE` or `HEADER`.",
+							ElementType: types.StringType,
+							Optional:    true,
+						},
+					},
+				},
+			},
+			"rate_limit_effective": schema.SingleNestedBlock{
+				Description: "Rule effective cycle. Required when `effective_status` is `WITHIN` or `WITHOUT`.",
 				Attributes: map[string]schema.Attribute{
-					"ip_or_ips_conditions": schema.ListNestedAttribute{
-						Description: "IP/IP segment conditions, match types cannot be duplicated.",
+					"effective": schema.ListAttribute{
+						Description: "Days of week when the rule takes effect. Valid values: `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, `SUN`.",
+						ElementType: types.StringType,
 						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						Validators: []validator.List{
+							listvalidator.ValueStringsAre(stringvalidator.OneOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")),
+						},
+					},
+					"start": schema.StringAttribute{
+						Description: "Start time, format: `HH:mm`.",
+						Optional:    true,
+					},
+					"end": schema.StringAttribute{
+						Description: "End time, format: `HH:mm`.",
+						Optional:    true,
+					},
+					"timezone": schema.StringAttribute{
+						Description: "Timezone, default: `GMT+8`. Refer to vendor documentation for valid values.",
+						Optional:    true,
+					},
+				},
+			},
+			"rate_limit_rule_condition": schema.SingleNestedBlock{
+				Description: "Match conditions of the rate limit rule.",
+				Blocks: map[string]schema.Block{
+					"ip_or_ips_conditions": schema.ListNestedBlock{
+						Description: "IP/IP segment conditions, match types cannot be duplicated.",
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -302,10 +301,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"path_conditions": schema.ListNestedAttribute{
+					"path_conditions": schema.ListNestedBlock{
 						Description: "Path conditions, match types cannot be duplicated. Not supported when the business scenario is API.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL` (case sensitive), `NOT_EQUAL` (case sensitive), `CONTAIN`, `NOT_CONTAIN`, `REGEX`, `NOT_REGEX`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`. `REGEX`/`NOT_REGEX` allows only one value.",
@@ -322,10 +320,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"uri_conditions": schema.ListNestedAttribute{
+					"uri_conditions": schema.ListNestedBlock{
 						Description: "URI conditions, match types cannot be duplicated. Not supported when the business scenario is API.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL` (case sensitive), `NOT_EQUAL` (case sensitive), `CONTAIN`, `NOT_CONTAIN`, `REGEX`, `NOT_REGEX`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`. `REGEX`/`NOT_REGEX` allows only one value.",
@@ -342,10 +339,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"ua_conditions": schema.ListNestedAttribute{
+					"ua_conditions": schema.ListNestedBlock{
 						Description: "User-Agent conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL` (case sensitive), `NOT_EQUAL` (case sensitive), `CONTAIN`, `NOT_CONTAIN`, `NONE` (empty or not exist), `REGEX`, `NOT_REGEX`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`. `REGEX`/`NOT_REGEX` allows only one value.",
@@ -362,10 +358,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"method_conditions": schema.ListNestedAttribute{
+					"method_conditions": schema.ListNestedBlock{
 						Description: "Request method conditions, match types cannot be duplicated. Not supported when the business scenario is API.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -385,10 +380,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"referer_conditions": schema.ListNestedAttribute{
+					"referer_conditions": schema.ListNestedBlock{
 						Description: "Referer conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL` (case sensitive), `NOT_EQUAL` (case sensitive), `CONTAIN`, `NOT_CONTAIN`, `NONE` (empty or not exist), `REGEX`, `NOT_REGEX`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`. `REGEX`/`NOT_REGEX` allows only one value.",
@@ -405,10 +399,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"header_conditions": schema.ListNestedAttribute{
+					"header_conditions": schema.ListNestedBlock{
 						Description: "Request header conditions, match types can be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL` (case sensitive), `NOT_EQUAL` (case sensitive), `CONTAIN`, `NOT_CONTAIN`, `NONE` (empty or not exist), `REGEX`, `NOT_REGEX`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`. `REGEX`/`NOT_REGEX` allows only one value.",
@@ -439,10 +432,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"area_conditions": schema.ListNestedAttribute{
+					"area_conditions": schema.ListNestedBlock{
 						Description: "Area conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -459,10 +451,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"scheme_conditions": schema.ListNestedAttribute{
+					"scheme_conditions": schema.ListNestedBlock{
 						Description: "Application layer protocol conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -482,10 +473,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"status_code_conditions": schema.ListNestedAttribute{
+					"status_code_conditions": schema.ListNestedBlock{
 						Description: "Status code conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -502,10 +492,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"ja3_conditions": schema.ListNestedAttribute{
+					"ja3_conditions": schema.ListNestedBlock{
 						Description: "JA3 fingerprint conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -525,10 +514,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"ja4_conditions": schema.ListNestedAttribute{
+					"ja4_conditions": schema.ListNestedBlock{
 						Description: "JA4 fingerprint conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`, `CONTAIN`, `NOT_CONTAIN`, `START_WITH`, `END_WITH`, `WILDCARD`, `NOT_WILDCARD`.",
@@ -548,10 +536,9 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 							},
 						},
 					},
-					"asn_conditions": schema.ListNestedAttribute{
+					"asn_conditions": schema.ListNestedBlock{
 						Description: "ASN conditions, match types cannot be duplicated.",
-						Optional:    true,
-						NestedObject: schema.NestedAttributeObject{
+						NestedObject: schema.NestedBlockObject{
 							Attributes: map[string]schema.Attribute{
 								"match_type": schema.StringAttribute{
 									Description: "Match type. Valid values: `EQUAL`, `NOT_EQUAL`.",
@@ -562,10 +549,13 @@ func (r *sharedConfigRatelimitResource) Schema(_ context.Context, req resource.S
 								},
 								"asn_list": schema.ListAttribute{
 									Description: "ASN list, positive integers within 1 - 4294967295.",
-									ElementType: types.Int64Type,
+									ElementType: types.StringType,
 									Required:    true,
 									Validators: []validator.List{
-										listvalidator.ValueInt64sAre(int64validator.Between(1, 4294967295)),
+										listvalidator.ValueStringsAre(
+											stringvalidator.RegexMatches(regexp.MustCompile("^[1-9][0-9]{0,9}$"),
+												"must be a positive integer within 1 - 4294967295"),
+										),
 									},
 								},
 							},
@@ -594,7 +584,7 @@ func (r *sharedConfigRatelimitResource) Create(ctx context.Context, req resource
 		resp.Diagnostics.AddError("[API ERROR] Fail to Add SharedConfigRateLimit", err.Error())
 		return
 	}
-	if addResponse.Code != "200" {
+	if addResponse.Code != 200 {
 		resp.Diagnostics.AddError("[API ERROR] Fail to Add SharedConfigRateLimit", fmt.Sprintf("code: %s, msg: %s", addResponse.Code, addResponse.Msg))
 		return
 	}
@@ -659,7 +649,7 @@ func (r *sharedConfigRatelimitResource) Update(ctx context.Context, req resource
 		resp.Diagnostics.AddError("[API ERROR] Fail to Update SharedConfigRateLimit", err.Error())
 		return
 	}
-	if updateResponse.Code != "200" {
+	if updateResponse.Code != 200 {
 		resp.Diagnostics.AddError("[API ERROR] Fail to Update SharedConfigRateLimit", fmt.Sprintf("code: %s, msg: %s", updateResponse.Code, updateResponse.Msg))
 		return
 	}
@@ -697,7 +687,7 @@ func (r *sharedConfigRatelimitResource) Delete(ctx context.Context, req resource
 		resp.Diagnostics.AddError("[API ERROR] Fail to Delete SharedConfigRateLimit", err.Error())
 		return
 	}
-	if deleteResponse.Code != "200" {
+	if deleteResponse.Code != 200 {
 		resp.Diagnostics.AddError("[API ERROR] Fail to Delete SharedConfigRateLimit", fmt.Sprintf("code: %s, msg: %s", deleteResponse.Code, deleteResponse.Msg))
 		return
 	}
@@ -739,7 +729,7 @@ func findSharedRateLimitRule(client *cdnetworksapi.Client, id string) (*cdnetwor
 	if err != nil {
 		return nil, err
 	}
-	if getResponse.Code != "200" {
+	if getResponse.Code != 200 {
 		return nil, fmt.Errorf("code: %s, msg: %s", getResponse.Code, getResponse.Msg)
 	}
 	for i := range getResponse.Data {
@@ -871,13 +861,9 @@ func buildRateLimitRuleConditionFromModel(condition *rateLimitRuleConditionModel
 		})
 	}
 	for _, c := range condition.ASNConditions {
-		asnList := make([]uint32, 0, len(c.ASNList))
-		for _, asn := range c.ASNList {
-			asnList = append(asnList, uint32(asn))
-		}
 		result.ASNConditions = append(result.ASNConditions, cdnetworksapi.ASNCondition{
 			MatchType: c.MatchType.ValueString(),
-			ASNList:   asnList,
+			ASNList:   c.ASNList,
 		})
 	}
 	return result
@@ -954,7 +940,7 @@ func buildStatisticalItemsFromRule(items []cdnetworksapi.StatisticalItem) []stat
 // buildRateLimitEffectiveFromRule converts the effective cycle of the API
 // representation to the model.
 func buildRateLimitEffectiveFromRule(effective *cdnetworksapi.RateLimitEffective) *rateLimitEffectiveModel {
-	if effective == nil {
+	if effective == nil || len(effective.Effective) == 0 {
 		return nil
 	}
 	return &rateLimitEffectiveModel{
@@ -1047,13 +1033,9 @@ func buildRateLimitRuleConditionFromRule(condition *cdnetworksapi.RateLimitRuleC
 		})
 	}
 	for _, c := range condition.ASNConditions {
-		asnList := make([]int64, 0, len(c.ASNList))
-		for _, asn := range c.ASNList {
-			asnList = append(asnList, int64(asn))
-		}
 		result.ASNConditions = append(result.ASNConditions, asnConditionModel{
 			MatchType: types.StringValue(c.MatchType),
-			ASNList:   asnList,
+			ASNList:   c.ASNList,
 		})
 	}
 	return result
